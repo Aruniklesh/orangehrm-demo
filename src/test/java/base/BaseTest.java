@@ -2,7 +2,9 @@ package base;
 
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
+import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.edge.EdgeDriver;
+import org.openqa.selenium.edge.EdgeOptions;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 
@@ -26,7 +28,11 @@ public class BaseTest {
         explicitWaitTimeout = Duration.ofSeconds(
                 Long.parseLong(config.getProperty("explicit.wait.seconds")));
 
-        driver = createDriver(config.getProperty("browser"));
+        // -Dheadless=true (used by Jenkins) overrides the value in config.properties
+        boolean headless = Boolean.parseBoolean(
+                System.getProperty("headless", config.getProperty("headless", "false")));
+
+        driver = createDriver(config.getProperty("browser"), headless);
         driver.manage().window().maximize();
         driver.get(config.getProperty("base.url"));
     }
@@ -38,12 +44,21 @@ public class BaseTest {
         }
     }
 
-    private WebDriver createDriver(String browserName) {
+    private WebDriver createDriver(String browserName, boolean headless) {
         switch (browserName.trim().toLowerCase()) {
             case "chrome":
-                return new ChromeDriver(); // Selenium Manager downloads the matching driver
+                ChromeOptions chromeOptions = new ChromeOptions();
+                if (headless) {
+                    // Headless browsers have no screen, so give them a fixed window size
+                    chromeOptions.addArguments("--headless=new", "--window-size=1920,1080");
+                }
+                return new ChromeDriver(chromeOptions); // Selenium Manager downloads the matching driver
             case "edge":
-                return new EdgeDriver();
+                EdgeOptions edgeOptions = new EdgeOptions();
+                if (headless) {
+                    edgeOptions.addArguments("--headless=new", "--window-size=1920,1080");
+                }
+                return new EdgeDriver(edgeOptions);
             default:
                 throw new IllegalArgumentException(
                         "Unsupported browser '" + browserName + "'. Use 'chrome' or 'edge' in config.properties.");
