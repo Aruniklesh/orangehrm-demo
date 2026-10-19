@@ -3,7 +3,9 @@
 A small, beginner-friendly UI automation project that tests the login and logout journey of the public
 [OrangeHRM demo site](https://opensource-demo.orangehrmlive.com/web/index.php/auth/login).
 
-**Stack:** Java 21, Selenium WebDriver 4, TestNG 7, Maven, Page Object Model.
+**Stack:** Java 21, Selenium WebDriver 4, TestNG 7, Maven, Page Object Model, ExtentReports, Log4j2.
+
+Each run produces an HTML report, screenshots and an execution log (see [Test output](#test-output)).
 
 > Only use this against the public demo site. Do not point it at production or private systems.
 
@@ -19,15 +21,26 @@ A small, beginner-friendly UI automation project that tests the login and logout
 ```text
 orangehrm-login-automation/
 ├── pom.xml                                   Maven build file (dependencies, plugins)
+├── Jenkinsfile                               Jenkins pipeline definition
 ├── .gitignore
 ├── README.md
 └── src/test/
     ├── java/
-    │   ├── base/BaseTest.java                Starts and closes the browser for every test
+    │   ├── base/BaseTest.java                Starts/closes the browser; logStep helpers
     │   ├── pages/LoginPage.java              Locators and actions for the login page (Page Object)
-    │   └── tests/LoginTest.java              The test cases and assertions
-    └── resources/config.properties           URL, browser and wait settings (no secrets)
+    │   ├── tests/LoginTest.java              The test cases and assertions
+    │   └── utils/
+    │       ├── ConfigReader.java             Reads settings (-D flag > environment variable > config.properties)
+    │       ├── ScreenshotUtil.java           Saves PNG screenshots
+    │       ├── ExtentManager.java            Creates the HTML report
+    │       ├── ExtentTestManager.java        Tracks the report entry of the running test
+    │       └── TestListener.java             Records PASS/FAIL, failure screenshot, log lines
+    └── resources/
+        ├── config.properties                 URL, browser, headless and wait settings (no secrets)
+        └── log4j2.xml                        Logging setup (console + logs/execution.log)
 ```
+
+Generated at run time (not committed): `reports/`, `screenshots/`, `logs/`, `target/`.
 
 ## Prerequisites
 
@@ -44,7 +57,11 @@ orangehrm-login-automation/
 |---|---|---|
 | `base.url` | Login page URL | the OrangeHRM demo login page |
 | `browser` | `chrome` or `edge` | `chrome` |
+| `headless` | `true` runs the browser without a window (used on CI) | `false` |
 | `explicit.wait.seconds` | Maximum seconds an explicit wait will wait | `15` |
+
+Any setting can be overridden for one run with a `-D` flag, for example `mvn test -Dbrowser=edge`
+or `mvn test -Dheadless=true`. Lookup order: `-D` flag, then environment variable, then `config.properties`.
 
 **Credentials** are never stored in the code or in Git. Tests read them from two environment variables.
 The demo username and password are displayed on the login page itself.
@@ -55,6 +72,10 @@ PowerShell (applies to the current window only):
 $env:ORANGEHRM_USERNAME = "<username shown on the login page>"
 $env:ORANGEHRM_PASSWORD = "<password shown on the login page>"
 ```
+
+The password is never read from `config.properties`, only from the environment variable
+`ORANGEHRM_PASSWORD` (or `-Dorangehrm.password`, which is visible in shell history, so prefer the variable).
+Passwords are never written to the log or the report.
 
 Command Prompt: `set ORANGEHRM_USERNAME=...` and `set ORANGEHRM_PASSWORD=...`
 macOS/Linux: `export ORANGEHRM_USERNAME=...` and `export ORANGEHRM_PASSWORD=...`
@@ -75,6 +96,9 @@ mvn test -Dtest=LoginTest
 # Run one test method
 mvn test -Dtest=LoginTest#shouldShowErrorForInvalidPassword
 
+# Run without a visible browser window (like Jenkins)
+mvn clean test -Dheadless=true
+
 # Compile only (no browser, quick sanity check)
 mvn test-compile
 ```
@@ -86,8 +110,18 @@ Successful output ends with:
 [INFO] BUILD SUCCESS
 ```
 
-A full run takes roughly 40 seconds. Reports are written to `target/surefire-reports/`
-(`tests.LoginTest.txt` is the readable summary).
+A full run takes roughly 40 to 60 seconds.
+
+## Test output
+
+| What | Where | Details |
+|---|---|---|
+| HTML report | `reports/ExtentReport_<timestamp>.html` | Open in a browser. Shows each test, its steps, PASS/FAIL, error message and embedded screenshots. A new file per run. |
+| Screenshots | `screenshots/<test>_<step>_<timestamp>.png` | Taken after login, after the invalid-login error, after logout, and automatically on any failure |
+| Execution log | `logs/execution.log` | Test start/pass/fail, steps and errors. No passwords. |
+| Maven summary | `target/surefire-reports/` | Plain-text and XML results |
+
+All of these folders are listed in `.gitignore` and are not committed.
 
 ## Troubleshooting
 
@@ -98,7 +132,8 @@ A full run takes roughly 40 seconds. Reports are written to `target/surefire-rep
 | `TimeoutException` | Demo site is slow or down, or its page changed. Open the URL in a browser; raise `explicit.wait.seconds` |
 | Browser or driver errors | Make sure Chrome/Edge is installed and you are online; try `browser=edge` |
 | `Invalid credentials` in the success test | Check the demo credentials shown on the login page; they can change |
-| `SLF4J: No SLF4J providers were found` | Harmless warning; logging is simply disabled |
+| Blank screenshot | It was taken before the page rendered; take screenshots only after a wait or assertion |
+| Duplicate entries in the report | Keep `maven-surefire-plugin` at 3.5.6 (3.6.0 runs TestNG through a JUnit adapter that fires listeners during a dry run) |
 
 ## Notes
 
