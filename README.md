@@ -9,6 +9,16 @@ Each run produces an HTML report, screenshots and an execution log (see [Test ou
 
 > Only use this against the public demo site. Do not point it at production or private systems.
 
+## What has been built so far
+
+| Stage | What was added |
+|---|---|
+| 1. Core framework | Maven project, Selenium + TestNG, Page Object Model (`LoginPage`), shared setup/teardown (`BaseTest`), explicit waits |
+| 2. Tests | Successful login and logout, and an invalid-password negative test (locators and the `Invalid credentials` message were checked on the live site) |
+| 3. Configuration | `config.properties` for non-secret settings; credentials from environment variables only; `ConfigReader` with `-D` overrides |
+| 4. Jenkins (CI) | `Jenkinsfile` and a headless browser option so tests run on a server without a screen |
+| 5. Reporting | ExtentReports HTML report, screenshots (including automatic ones on failure), and Log4j2 execution logs |
+
 ## What is tested
 
 | Test | Steps | Expected result |
@@ -123,11 +133,31 @@ A full run takes roughly 40 to 60 seconds.
 
 All of these folders are listed in `.gitignore` and are not committed.
 
+## Running in Jenkins
+
+The `Jenkinsfile` defines a pipeline with a Checkout stage and a Test stage (`mvn clean test -Dheadless=true`),
+and publishes the JUnit results. One-time Jenkins setup:
+
+1. **Plugins:** Pipeline, Git, Credentials Binding, JUnit.
+2. **Manage Jenkins > Tools:** add a JDK named `JDK21` and a Maven installation named `Maven3` (names must match the Jenkinsfile).
+3. **Manage Jenkins > Credentials > Global:** add two *Secret text* credentials with the IDs
+   `orangehrm-username` and `orangehrm-password` (the IDs must match exactly; leaving the ID blank generates a random one).
+4. **New Item > Pipeline:** set *Definition* to **Pipeline script from SCM**, SCM **Git**, your repository URL,
+   branch `*/main`, script path `Jenkinsfile`. Do not paste the script into the job (`checkout scm` only works from SCM).
+5. Do not tick "Build after other projects are built" with the job's own name.
+6. Click **Build Now**. A passing build ends with `Tests run: 2, Failures: 0` and `Finished: SUCCESS`.
+
+The HTML report, screenshots and log are created in the Jenkins workspace but are not archived or published by the
+current Jenkinsfile; only the JUnit test results are shown on the build page.
+
 ## Troubleshooting
 
 | Symptom | Likely cause and fix |
 |---|---|
-| `Environment variable ORANGEHRM_USERNAME is not set` | Set both variables in the same terminal you run Maven from |
+| `Missing setting 'orangehrm.username'` (or `.password`) | Set the environment variables `ORANGEHRM_USERNAME` / `ORANGEHRM_PASSWORD` in the same terminal you run Maven from |
+| Jenkins: `ERROR: orangehrm-username` | The credential ID is missing or different in Jenkins; recreate it as *Secret text*, scope Global |
+| Jenkins: `'checkout scm' is only available when using ... Pipeline script from SCM` | The job is set to *Pipeline script*; change *Definition* to *Pipeline script from SCM* |
+| Jenkins: build stays on "Build scheduled" | Check the Build Queue reason and the executors under Manage Jenkins > Nodes |
 | `release version 21 not supported` | Maven is running on an older JDK; check `JAVA_HOME` |
 | `TimeoutException` | Demo site is slow or down, or its page changed. Open the URL in a browser; raise `explicit.wait.seconds` |
 | Browser or driver errors | Make sure Chrome/Edge is installed and you are online; try `browser=edge` |
@@ -140,4 +170,6 @@ All of these folders are listed in `.gitignore` and are not committed.
 - Every test starts a fresh browser (`@BeforeMethod`) and closes it afterwards (`@AfterMethod`), so tests are independent.
 - Waits are explicit (`WebDriverWait`); there is no `Thread.sleep()`.
 - The invalid-password test waits the full timeout for a Dashboard that never appears, which makes it slower than it strictly needs to be.
+- The public demo site is shared and sometimes slow; an occasional timeout is usually cured by re-running.
+- In headless mode the window is a fixed 1920x1080 (set at browser start); `maximize()` is only used for visible browsers.
 - `LoginPage` also holds the Dashboard check and logout action to keep the project to one page class. A larger project would move them into a separate `DashboardPage`.
