@@ -11,11 +11,7 @@ import java.io.InputStream;
 import java.time.Duration;
 import java.util.Properties;
 
-/**
- * Parent class for all test classes.
- * It starts a fresh browser before every test and closes it afterwards,
- * so individual tests never repeat that code.
- */
+
 public class BaseTest {
 
     // protected: child classes (like LoginTest) can use the same browser
